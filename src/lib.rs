@@ -88,11 +88,11 @@ pub fn parse<'a>(input: &'a str) -> Result<Value, Box<dyn Error + 'a>> {
     Ok(result)
 }
 
-fn json(input: &str) -> IResult<&str, Value> {
+pub fn json(input: &str) -> IResult<&str, Value> {
     element(input)
 }
 
-fn value_parser(input: &str) -> IResult<&str, Value> {
+pub fn value_parser(input: &str) -> IResult<&str, Value> {
     alt((
         map(object, |m| Value::Object(m)),
         map(array, |v| Value::Array(v)),
@@ -104,7 +104,7 @@ fn value_parser(input: &str) -> IResult<&str, Value> {
     ))(input)
 }
 
-fn object(input: &str) -> IResult<&str, HashMap<String, Value>> {
+pub fn object(input: &str) -> IResult<&str, HashMap<String, Value>> {
     delimited(
         ws,
         alt((
@@ -148,7 +148,7 @@ fn member(input: &str) -> IResult<&str, (String, Value)> {
     )(input)
 }
 
-fn array(input: &str) -> IResult<&str, Vec<Value>> {
+pub fn array(input: &str) -> IResult<&str, Vec<Value>> {
     alt((
         value(vec![], delimited(tag("["), ws, tag("]"))),
         delimited(tag("["), elements, tag("]")),
@@ -168,7 +168,7 @@ fn elements(input: &str) -> IResult<&str, Vec<Value>> {
     ))(input)
 }
 
-fn element(input: &str) -> IResult<&str, Value> {
+pub fn element(input: &str) -> IResult<&str, Value> {
     delimited(ws, value_parser, ws)(input)
 }
 
