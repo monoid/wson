@@ -1,4 +1,6 @@
 use crate::number::digit;
+use crate::WsonError;
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -15,37 +17,37 @@ pub struct JsonString(pub String);
 /// Recognize string
 /// ```rust
 /// use wson::string::{string, JsonString};
-/// # use std::error::Error;
-/// # fn main() -> Result<(), Box<dyn Error>> {
-/// let value = string("\"\"")?;
+/// # use nom::error::Error;
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let value = string::<Error<&str>>("\"\"")?;
 /// assert_eq!(value, ("", JsonString("".to_string())));
 ///
-/// let value = string("\"hello\"")?;
+/// let value = string::<Error<&str>>("\"hello\"")?;
 /// assert_eq!(value, ("", JsonString("hello".to_string())));
 ///
-/// let value = string("\"こんにちは\"")?;
+/// let value = string::<Error<&str>>("\"こんにちは\"")?;
 /// assert_eq!(value, ("", JsonString("こんにちは".to_string())));
 ///
-/// let value = string("\"abc123\"")?;
+/// let value = string::<Error<&str>>("\"abc123\"")?;
 /// assert_eq!(value, ("", JsonString("abc123".to_string())));
 ///
-/// let value = string("\"He\\\"\\\"llo\"")?;
+/// let value = string::<Error<&str>>("\"He\\\"\\\"llo\"")?;
 /// assert_eq!(value, ("", JsonString("He\\\"\\\"llo".to_string())));
 ///
 /// # Ok(())
 /// # }
 /// ```
-pub fn string(input: &str) -> IResult<&str, JsonString> {
+pub fn string<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, JsonString, E> {
     map(delimited(tag("\""), characters, tag("\"")), |str: &str| {
         JsonString(str.to_string())
     })(input)
 }
 
-fn characters(input: &str) -> IResult<&str, &str> {
+fn characters<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, &'inp str, E> {
     recognize(many0(character))(input)
 }
 
-fn character(input: &str) -> IResult<&str, &str> {
+fn character<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, &'inp str, E> {
     alt((
         recognize(tuple((tag("\\"), escape))),
         recognize(satisfy(|c| c != '"')),
@@ -62,7 +64,7 @@ fn character(input: &str) -> IResult<&str, &str> {
 //        | 'r' CarriageReturn
 //        | 't' Tab
 //        | 'u' hex hex hex hex
-fn escape(input: &str) -> IResult<&str, &str> {
+fn escape<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, &'inp str, E> {
     alt((
         recognize(one_of("\"\\/bfnrt")),
         recognize(tuple((tag("u"), hex, hex, hex, hex))),
@@ -72,7 +74,7 @@ fn escape(input: &str) -> IResult<&str, &str> {
 // hex = digit
 //     | 'A' . 'F'
 //     | 'a' . 'f'
-fn hex(input: &str) -> IResult<&str, &str> {
+fn hex<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, &'inp str, E> {
     alt((recognize(digit), recognize(one_of("abcdefABCDEF"))))(input)
 }
 
@@ -86,70 +88,70 @@ mod tests {
 
     #[test]
     fn parse_empty_string() -> TestResult {
-        let value = string("\"\"")?;
+        let value = string::<()>("\"\"")?;
         assert_eq!(value, ("", JsonString("".to_string())));
         Ok(())
     }
 
     #[test]
     fn parse_hello_string() -> TestResult {
-        let value = string("\"hello\"")?;
+        let value = string::<()>("\"hello\"")?;
         assert_eq!(value, ("", JsonString("hello".to_string())));
         Ok(())
     }
 
     #[test]
     fn parse_utf8_string() -> TestResult {
-        let value = string("\"こんにちは\"")?;
+        let value = string::<()>("\"こんにちは\"")?;
         assert_eq!(value, ("", JsonString("こんにちは".to_string())));
         Ok(())
     }
 
     #[test]
     fn parse_alphanum_string() -> TestResult {
-        let value = string("\"abc123\"")?;
+        let value = string::<()>("\"abc123\"")?;
         assert_eq!(value, ("", JsonString("abc123".to_string())));
         Ok(())
     }
 
     #[test]
     fn hex_five() -> TestResult {
-        let value = hex("5")?;
+        let value = hex::<()>("5")?;
         assert_eq!(value, ("", "5"));
         Ok(())
     }
 
     #[test]
     fn hex_f() -> TestResult {
-        let value = hex("f")?;
+        let value = hex::<()>("f")?;
         assert_eq!(value, ("", "f"));
         Ok(())
     }
 
     #[test]
     fn hex_large_f() -> TestResult {
-        let value = hex("F")?;
+        let value = hex::<()>("F")?;
         assert_eq!(value, ("", "F"));
         Ok(())
     }
 
     #[test]
     fn escape_slash() -> TestResult {
-        let value = escape("/")?;
+        let value = escape::<()>("/")?;
         assert_eq!(value, ("", "/"));
         Ok(())
     }
 
     #[test]
     fn escape_unicode() -> TestResult {
-        let value = escape("u1234")?;
+        let value = escape::<()>("u1234")?;
         assert_eq!(value, ("", "u1234"));
         Ok(())
     }
 
     #[test]
     fn character_unicode() -> TestResult {
-        let value = character("\\u1234")?;
+        let value = character::<()>("\\u1234")?;
         assert_eq!(value, ("", "\\u1234"));
         Ok(())
     }

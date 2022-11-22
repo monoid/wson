@@ -12,6 +12,7 @@ use nom::{
     bytes::complete::tag,
     character::complete::{newline, space1},
     combinator::{all_consuming, map, recognize, value},
+    error::ParseError,
     multi::{many0, many1},
     sequence::{delimited, separated_pair},
     IResult,
@@ -83,16 +84,23 @@ pub enum Value {
 /// # }
 /// ```
 pub fn parse<'a>(input: &'a str) -> Result<Value, Box<dyn Error + 'a>> {
-    let (_, result) = all_consuming(json)(input)?;
+    let (_, result) = all_consuming(json::<nom::error::Error<&str>>)(input)?;
 
     Ok(result)
 }
 
-pub fn json(input: &str) -> IResult<&str, Value> {
+pub trait WsonError<'inp>: ParseError<&'inp str> {
+}
+
+impl<'inp, E> WsonError<'inp> for E where E: ParseError<&'inp str> {
+
+}
+
+pub fn json<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, Value, E> {
     element(input)
 }
 
-pub fn value_parser(input: &str) -> IResult<&str, Value> {
+pub fn value_parser<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, Value, E> {
     alt((
         map(object, |m| Value::Object(m)),
         map(array, |v| Value::Array(v)),
@@ -104,7 +112,7 @@ pub fn value_parser(input: &str) -> IResult<&str, Value> {
     ))(input)
 }
 
-pub fn object(input: &str) -> IResult<&str, HashMap<String, Value>> {
+pub fn object<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, HashMap<String, Value>, E> {
     delimited(
         ws,
         alt((
@@ -131,7 +139,7 @@ pub fn object(input: &str) -> IResult<&str, HashMap<String, Value>> {
     )(input)
 }
 
-fn members(input: &str) -> IResult<&str, Vec<(String, Value)>> {
+fn members<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, Vec<(String, Value)>, E> {
     alt((
         map(separated_pair(member, tag(","), members), |(m, ms)| {
             let vec = vec![m];
@@ -141,21 +149,21 @@ fn members(input: &str) -> IResult<&str, Vec<(String, Value)>> {
     ))(input)
 }
 
-fn member(input: &str) -> IResult<&str, (String, Value)> {
+fn member<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, (String, Value), E> {
     map(
         separated_pair(delimited(ws, string, ws), tag(":"), element),
         |(key, value)| (key.0, value),
     )(input)
 }
 
-pub fn array(input: &str) -> IResult<&str, Vec<Value>> {
+pub fn array<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, Vec<Value>, E> {
     alt((
         value(vec![], delimited(tag("["), ws, tag("]"))),
         delimited(tag("["), elements, tag("]")),
     ))(input)
 }
 
-fn elements(input: &str) -> IResult<&str, Vec<Value>> {
+fn elements<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, Vec<Value>, E> {
     alt((
         map(
             separated_pair(element, tag(","), elements),
@@ -168,11 +176,12 @@ fn elements(input: &str) -> IResult<&str, Vec<Value>> {
     ))(input)
 }
 
-pub fn element(input: &str) -> IResult<&str, Value> {
+pub fn element<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, Value, E> {
     delimited(ws, value_parser, ws)(input)
 }
 
-fn ws(input: &str) -> IResult<&str, &str> {
+fn ws<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, &'inp str, E>
+{
     recognize(many0(alt((recognize(many1(newline)), space1))))(input)
 }
 
@@ -192,21 +201,21 @@ mod tests {
 
     #[test]
     fn empty_array() -> TestResult {
-        let value = array("[]")?;
+        let value = array::<()>("[]")?;
         assert_eq!(value, ("", vec![]));
         Ok(())
     }
 
     #[test]
     fn a_number_array() -> TestResult {
-        let value = array("[1]")?;
+        let value = array::<()>("[1]")?;
         assert_eq!(value, ("", vec![Value::Number(Number::PositiveInteger(1))]));
         Ok(())
     }
 
     #[test]
     fn multiple_number_array() -> TestResult {
-        let value = array("[1, 2]")?;
+        let value = array::<()>("[1, 2]")?;
         assert_eq!(
             value,
             (
@@ -222,7 +231,7 @@ mod tests {
 
     #[test]
     fn multiple_string_and_number_array() -> TestResult {
-        let value = array("[1, \"str\", 2.5e3]")?;
+        let value = array::<()>("[1, \"str\", 2.5e3]")?;
         assert_eq!(
             value,
             (
@@ -239,21 +248,21 @@ mod tests {
 
     #[test]
     fn parse_empty_object() -> TestResult {
-        let value = object("{ }")?;
+        let value = object::<()>("{ }")?;
         assert_eq!(value, ("", HashMap::new()));
         Ok(())
     }
 
     #[test]
     fn parse_empty_object2() -> TestResult {
-        let value = object(" { } ")?;
+        let value = object::<()>(" { } ")?;
         assert_eq!(value, ("", HashMap::new()));
         Ok(())
     }
 
     #[test]
     fn parse_a_object() -> TestResult {
-        let value = object("{\"key\": 1}")?;
+        let value = object::<()>("{\"key\": 1}")?;
         let mut expected = HashMap::new();
         expected.insert("key".to_string(), Value::Number(Number::PositiveInteger(1)));
 
@@ -263,7 +272,7 @@ mod tests {
 
     #[test]
     fn a_members() -> TestResult {
-        let value = members("\"key\": 1")?;
+        let value = members::<()>("\"key\": 1")?;
         assert_eq!(
             value,
             (
@@ -276,7 +285,7 @@ mod tests {
 
     #[test]
     fn multi_members() -> TestResult {
-        let value = members("\"key1\": 1, \"key2\": 2")?;
+        let value = members::<()>("\"key1\": 1, \"key2\": 2")?;
         assert_eq!(
             value,
             (
@@ -316,7 +325,7 @@ mod tests {
 
     #[test]
     fn ws_newline() -> TestResult {
-        let value = ws("
+        let value = ws::<()>("
 ")?;
         assert_eq!(value, ("", "\n"));
         Ok(())

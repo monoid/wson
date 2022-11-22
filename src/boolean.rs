@@ -1,10 +1,12 @@
 use nom::{bytes::complete::tag, combinator::value, IResult};
 
-pub fn true_parser(input: &str) -> IResult<&str, bool> {
+use crate::WsonError;
+
+pub fn true_parser<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, bool, E> {
     value(true, tag("true"))(input)
 }
 
-pub fn false_parser(input: &str) -> IResult<&str, bool> {
+pub fn false_parser<'inp, E: WsonError<'inp>>(input: &'inp str) -> IResult<&'inp str, bool, E> {
     value(false, tag("false"))(input)
 }
 
@@ -17,26 +19,26 @@ mod tests {
 
     #[test]
     fn pass_true() {
-        assert_eq!(true_parser("true false"), Ok((" false", true)));
+        assert_eq!(true_parser::<()>("true false"), Ok((" false", true)));
     }
 
     #[test]
     fn failed_true() {
         assert_eq!(
-            true_parser("false"),
+            true_parser::<nom::error::Error<&str>>("false"),
             Err(Err::Error(Error::new("false", ErrorKind::Tag)))
         );
     }
 
     #[test]
     fn pass_false() {
-        assert_eq!(false_parser("false true"), Ok((" true", false)));
+        assert_eq!(false_parser::<()>("false true"), Ok((" true", false)));
     }
 
     #[test]
     fn failed_false() {
         assert_eq!(
-            false_parser("true"),
+            false_parser::<nom::error::Error<&str>>("true"),
             Err(Err::Error(Error::new("true", ErrorKind::Tag)))
         );
     }
